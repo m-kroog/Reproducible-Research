@@ -1,0 +1,114 @@
+---
+title: "How the most harmful climate events effect population health and their econimic consequences"
+author: "Michael Kroog"
+date: "July 24, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+#### **Synopsis**
+
+Over the course of this research analysis two question were asked, which types of climate events are most harmful to population health and which have the greatest economic consequences. In order to answer these questions data from January 1996 to November 2011 was analyzed. With regard to population health the data analyzed were events that caused fatalities and injuries and for econimic consequences the data was crop damage and property damage. The data from all the states is summed and plotted in a side by side bar graph. This data will show that since January 1996 excessive heat has caused the most fatalities and tornados have caused the most injuries. The answer to the second question will be shown by the five most harmful events to crop damage and property damage. A graph will show that from the same timeframe drought was the most harmful to crop damage and flood was the most harmful to property damage.
+
+#### **Data Processing**
+
+The data was loaded in R using the read.csv() function. This data was then subsetted to contain the proper date range which had the most recorded events, this started at January 1996. Important columns like "EVTYPE", "FATALITIES", "INJURIES", "PROPDMG", "CROPDMG" were also subetted. In order to work with a smaller data set and since we are primarily focused on the most consequential events observations of 0 that were common to "FATALITIES" and "INJURIES" were subsetted out, the same was done for "CROPDMG" and "PROPDMG". However some conversion of the data from millions to billions needed to be done for "CROPDMG" and "PROPDMG" before removing the common 0. Separate data frames were created for population health and economic consequences. Bar plots were created in GGPlot2 to show the event type plotted against the value.
+
+```{r}
+library(dplyr)
+library(tidyr)
+
+cache = TRUE
+
+download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2", "StormData.csv")
+
+stormdata <- read.csv("StormData.csv", header = TRUE)
+
+stormdata1 <- stormdata[, c(1,2,7,8,19:30)]
+stormdata1 <- stormdata1[match("1/1/1996 0:00:00", as.character(stormdata1$BGN_DATE)):nrow(stormdata1), ]
+
+stormfat <- filter(stormdata1, FATALITIES > 0)
+stormfat <- arrange(stormfat, desc(FATALITIES))
+
+storming <- filter(stormdata1, INJURIES > 0)
+storming <- arrange(storming, desc(INJURIES))
+
+stormtest <- filter(stormdata1, FATALITIES > 0 | INJURIES > 0)
+stormfat <- arrange(stormtest, desc(FATALITIES))
+storming <- arrange(stormtest, desc(INJURIES))
+
+fatsum <- with(stormfat, tapply(FATALITIES, EVTYPE, sum))
+fatsum <- data.frame(evtype = names(fatsum), fatalities = fatsum)
+fatfive <- slice(arrange(fatsum, desc(fatalities)), 1:5)
+
+ingsum <- with(storming, tapply(INJURIES, EVTYPE, sum))
+ingsum <- data.frame(evtype = names(ingsum), injuries = ingsum)
+ingfive <- slice(arrange(ingsum, desc(injuries)), 1:5)
+
+totalfive <- bind_rows(fatfive, ingfive)
+totalfive[1, 3] <- totalfive[8, 3]
+totalfive[2, 3] <- totalfive[6, 3]
+totalfive[5, 3] <- totalfive[7, 3]
+totalfive[4, 3] <- totalfive[9, 3]
+totalfive[3, 3] <- as.numeric(1672)
+totalfive[10, 2] <- as.numeric(240)
+total <- slice(totalfive, c(1:5, 10))
+total <- gather(total, "evtype")
+colnames(total)[2] <- "Health"
+
+library(ggplot2)
+health <- ggplot(total, aes(x = evtype, y = value, group = Health)) + geom_bar(stat = "identity", position = "dodge", aes(fill = Health)) + labs(x = "Event Type", y = "Population Health") + scale_fill_discrete(labels = c("Fatalities", "Injuries"))
+
+fatper <- arrange(fatsum, desc(fatalities))
+fatper <- sum(fatper[c(1:5,7), 2]) / sum(fatper[1:109, 2])
+fatper <- round(fatper, 4) * 100
+
+ingper <- arrange(ingsum, desc(injuries))
+ingper <- round(sum(ingper[c(1:6), 2]) / sum(ingper[1:107, 2]) * 100, 2)
+ingper <- round(ingper, 4) * 100
+
+
+stormpropcrop <- filter(stormdata1, PROPDMG > 0 | CROPDMG > 0)
+stormpropcrop <- filter(stormdata1, PROPDMGEXP == "B" | CROPDMGEXP == "B" | PROPDMGEXP == "M" | CROPDMGEXP == "M")
+
+stormprop <- filter(stormpropcrop, PROPDMGEXP == "B")
+propsum <- with(stormprop, tapply(PROPDMG, EVTYPE, sum))
+propsum <- data.frame(evtype = names(propsum), propdmg = propsum)
+propfive <- slice(arrange(propsum, desc(propdmg)), 1:5)
+
+stormcropb <- filter(stormpropcrop, CROPDMGEXP == "B")
+cropsumb <- with(stormcropb, tapply(CROPDMG, EVTYPE, sum))
+cropsumb<- data.frame(evtype = names(cropsumb), cropdmg = cropsumb)
+cropbfive <- slice(arrange(cropsumb, desc(cropdmg)), 1:2)
+
+stormcropm <- filter(stormpropcrop, CROPDMGEXP == "M")
+cropsumm <- with(stormcropm, tapply(CROPDMG, EVTYPE, sum))
+cropsumm <- data.frame(evtype = names(cropsumm), cropdmg = cropsumm)
+cropmfive <- slice(arrange(cropsumm, desc(cropdmg)), 1:4)
+cropmfive[2] <- round(cropmfive$cropdmg / 1000, 2)
+cropfive <- rbind(cropmfive, cropbfive[1,])
+cropfive[1, 2] <- 13.35
+
+dmgfive <- bind_rows(propfive, cropfive)
+dmgfive[1, 3] <- dmgfive[7, 3] 
+dmgfive[2, 3] <- dmgfive[10, 3] 
+dmgfive[4, 3] <- dmgfive[8, 3] 
+dmg <- slice(dmgfive, c(1:6, 9))
+dmg <- gather(dmg, "evtype")
+colnames(dmg)[2] <- "Consequence"
+dmg[2, 1] <- "TYPHOON"
+dmg[9, 1] <- "TYPHOON"
+
+econ <- ggplot(dmg, aes(x = evtype, y = value, group = Consequence)) + geom_bar(stat = "identity", position = "dodge", aes(fill = Consequence)) + labs(x = "Event Type", y = "Damage (Billions)") + theme(axis.text.x= element_text(size = 8)) + scale_fill_discrete(labels = c("Crop Damage", "Prop Damage"))
+```
+#### **Results**
+
+The results of the data processing show that in the first graph excessive heat has caused the most fatalities and tornados have caused the most injuries. The second graph shows that drought was the most harmful to crop damage and flood was the most harmful to property damage. Note that for crop damage storm surge and tornado fall outside the top five events and therefore don't show on the graph. The same is for drought and hail in prop damage.
+
+```{r}
+health
+
+econ
+```
